@@ -43,19 +43,17 @@ omegaP = np.sqrt(pbeads) / beta       # Set w_P
 j = 80                                # For random bead kick
 d = 1                                 # For random bead kick
 zeta = 0.6                            # For random bead kick
-accept = 0                            # For computing acceptance percentage
 #======================================================================
 
 # Initialize bead positions
 primitives = np.zeros(pbeads)
-# Set random initial positions
+# Set initial positions by sampling from the distribution of a 1D free particle
 for r in range(pbeads):
-    primitives[r] = np.random.uniform(-1,1)
+    primitives[r] = np.random.normal(0, np.sqrt(beta/m) )
 
 # Masses for the staging coordinates
 m_k = np.zeros(j)
 for k in range(1,j+1):
-    # m_k[k] = (k+2) * m / (k+1)
     m_k[k-1] = (k+1) * m / k
 
 virial = []
@@ -74,9 +72,8 @@ for i in range(n_steps):
         # Transform entire chain to staged coords
         staged_whole_chain = np.zeros(pbeads)
         staged_whole_chain = get_closed_chain_stage_coords(primitives, pbeads)
-        # Define proposal (KEEP TRACK OF OLD COORDS AND NEW COORDS)
+        # Define proposal
         delta = np.random.uniform(-1,1)
-        # staged_whole_chain[0] += (1/np.sqrt(d)) * (zeta - 0.5) * delta
         staged_whole_chain[0] += delta
         primitives = closed_chain_inverse_stage_coords(staged_whole_chain, pbeads)
         # Define proposed potential
@@ -148,7 +145,7 @@ for i in range(1,len(virial)):
 steps = np.arange(1,n_steps+1)
 # # Plotting the virial estimator
 plt.xlim(min(steps)-100, max(steps))
-plt.ylim(min(virial)-1 ,max(virial)+1)
+plt.ylim(-1,6)
 plt.axhline(y=1.5, linewidth=2, color='r')
 plt.plot(steps, virial, '-', color='black', alpha=0.4)
 plt.plot(steps, cume, '-', color='blue')
