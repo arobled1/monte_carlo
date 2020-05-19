@@ -35,10 +35,10 @@ def seg_stage_to_prim(ui, xi, segment_length, rand_bead, num_beads):
 #=====================================================================
 # Block is for parameters
 n_steps = 50000                       # Number of MC steps
-beta = 1                              # 1/kT
-w = 1                                 # Set Frequency
-m = 1                                 # Set Mass
-pbeads = 10                           # Number of beads
+beta = 5.26667                               # 1/kT
+w = 3                                 # Set Frequency
+m = 0.01                                 # Set Mass
+pbeads = 400                           # Number of beads
 omegaP = np.sqrt(pbeads) / beta       # Set w_P
 j = 80                                # For random bead kick
 d = 1                                 # For random bead kick
@@ -58,6 +58,7 @@ for k in range(1,j+1):
     # m_k[k] = (k+2) * m / (k+1)
     m_k[k-1] = (k+1) * m / k
 
+virial = []
 for i in range(n_steps):
     if i !=0 and i % (pbeads/j) == 0:
         # Define potential from initial primitives
@@ -92,6 +93,11 @@ for i in range(n_steps):
                 primitives[k] = old_all_coords[k]
         else:
             accept += 1
+        # Computing the virial energy estimator
+        sumv = 0
+        for o in range(pbeads):
+            sumv += (m*w**2)*primitives[o]**2
+        virial.append(sumv / pbeads)
     else:
         # Pick a random bead.
         l = np.random.randint(pbeads)
@@ -127,3 +133,20 @@ for i in range(n_steps):
         # Otherwise accept proposal
         else:
             accept += 1
+        # Computing the virial energy estimator
+        sumv = 0
+        for o in range(pbeads):
+            sumv += (m*w**2)*primitives[o]**2
+        virial.append(sumv / pbeads)
+
+steps = np.arange(1,n_steps+1)
+# Plotting the virial estimator
+plt.xlim(min(steps)-100, max(steps))
+# plt.ylim(0,3)
+plt.ylim(min(virial)-2 ,max(virial)+2)
+# plt.axhline(y=1.5, linewidth=2, color='r')
+plt.plot(steps, virial, '-', color='black')
+plt.xlabel('# of Steps')
+plt.ylabel('Energy')
+plt.savefig('virial.pdf')
+plt.clf()
