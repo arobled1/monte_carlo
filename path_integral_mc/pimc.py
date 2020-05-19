@@ -139,13 +139,19 @@ for i in range(n_steps):
             sumv += (m*w**2)*primitives[o]**2
         virial.append(sumv / pbeads)
 
+# Compute cumulative average of the virial estimator
+cume = np.zeros(len(virial))
+cume[0] = virial[0]
+for i in range(1,len(virial)):
+    cume[i] = (i)/(i+1)*cume[i-1] + virial[i]/(i+1)
+
 steps = np.arange(1,n_steps+1)
-# Plotting the virial estimator
+# # Plotting the virial estimator
 plt.xlim(min(steps)-100, max(steps))
-# plt.ylim(0,3)
-plt.ylim(min(virial)-2 ,max(virial)+2)
-# plt.axhline(y=1.5, linewidth=2, color='r')
-plt.plot(steps, virial, '-', color='black')
+plt.ylim(min(virial)-1 ,max(virial)+1)
+plt.axhline(y=1.5, linewidth=2, color='r')
+plt.plot(steps, virial, '-', color='black', alpha=0.4)
+plt.plot(steps, cume, '-', color='blue')
 plt.xlabel('# of Steps')
 plt.ylabel('Energy')
 plt.savefig('virial.pdf')
