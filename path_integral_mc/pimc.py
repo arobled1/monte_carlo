@@ -65,6 +65,7 @@ m = 0.01                              # Set Mass
 pbeads = 400                          # Number of beads
 omegaP = np.sqrt(pbeads) / beta       # Set w_P
 j = 80                                # Number of beads in chain segment
+accept = 0                            # To count # of acceptances
 #======================================================================
 
 # Initialize bead positions
@@ -94,8 +95,8 @@ for i in range(n_steps):
         # Compare Pacc to u ~ U(0,1)
         if np.random.uniform(0,1) > Pacc:
             primitives = copy.deepcopy(old_coords)
-        # else:
-        #     accept += 1
+        else:
+            accept += 1
         # Computing the virial energy estimator
         sumv = 0
         for o in range(pbeads):
@@ -117,14 +118,15 @@ for i in range(n_steps):
         # Compare Pacc to u ~ U(0,1)
         if np.random.uniform(0,1) > Pacc:
             primitives = copy.deepcopy(old_coords)
-        # else:
-        #     accept += 1
+        else:
+            accept += 1
         # Computing the virial energy estimator
         sumv = 0
         for o in range(pbeads):
             sumv += (m*w**2)*primitives[o]**2
         virial.append(sumv / pbeads)
 
+print("Percentage of acceptances: ", (accept/n_steps)*100)
 # Compute cumulative average of the virial estimator
 cume = np.zeros(len(virial))
 cume[0] = virial[0]
