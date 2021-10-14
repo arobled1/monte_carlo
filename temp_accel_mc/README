@@ -1,0 +1,2 @@
+This directory will contain code for Temperature Accelerated Monte Carlo. 
+Currently, TAMC will be applied to Open Path Integral Monte Carlo, and will therefore have its own directories. 
