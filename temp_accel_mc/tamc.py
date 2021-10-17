@@ -4,27 +4,12 @@ import matplotlib.pyplot as plt
 import opimc_tamc_funcs as funcs
 
 
-def tamc_run(prims_z, vels_z, primitives_r, num_steps, pbeads, j, capital_n, mass, omega, omegaP, beta):
+def tamc_run(prims_z, vels_z, prims_r, num_mc_steps, num_pi_beads, j, capital_n, real_mass, real_freq, prim_omegap, inverse_temp):
     # Computing bead masses
-    masses = np.zeros(pbeads+1)
-    # Defining the mass for the first bead
-    masses[0] = 0
-    # Defining masses for endpoint beads
-    for s in range(1,capital_n+1):
-        masses[s*j] = (s+1) * mass / s
-    # Defining masses for intermediate beads
-        for k in range(1,j):
-            masses[(s-1)*j + k] = (k+1) * mass / k
-    # Defining the mass for the last bead
-    masses[pbeads] = mass/capital_n
+    masses = get_masses(num_pi_beads, j, capital_n, real_mass)
 
     # Computing bead frequencies
-    bead_frequencies = np.zeros(pbeads+1)
-    for s in range(capital_n):
-        bead_frequencies[s*j] = omegaP / np.sqrt(j)
-        for k in range(1,j):
-            bead_frequencies[s*j+k] = omegaP
-    bead_frequencies[pbeads] = omegaP / np.sqrt(j)
+    bead_frequencies = get_bead_frequencies(num_pi_beads, j, capital_n, inverse_temp)
 
     # Call MC here to generate forces
 
