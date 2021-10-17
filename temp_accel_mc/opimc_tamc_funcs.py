@@ -3,6 +3,34 @@ import numba
 from numba import jit
 
 @jit(nopython=True)
+# Update velocity at a half step dt/2
+def upd_velocity(veloc, force, deltat, mass):
+    veloc = (force * deltat)/(2 * mass)
+    return veloc
+
+@jit(nopython=True)
+# Update position at a half step dt/2
+def upd_position(posit, veloc, deltat):
+    posit = 0.5 * veloc * deltat
+    return posit
+
+@jit(nopython=True)
+# Use langevin thermostat to add randomness to your velocities
+def rand_kick(veloc, friction, boltz, mass, deltat):
+    gaussian = np.random.normal(0,1)
+    sqt1 = np.sqrt(1 - np.exp(-2*friction*deltat) )
+    sqt2 = np.sqrt(boltz) / np.sqrt(mass)
+    random = gaussian * sqt1 * sqt2
+    veloc = veloc * np.exp(- friction * deltat) + random
+    return veloc
+
+@jit(nopython=True)
+# Compute force from the harmonic springs in ring
+def get_harmonic_force(force, xi, mass, frequency):
+    force = - mass * (frequency**2) * xi
+    return force
+
+@jit(nopython=True)
 def get_masses(num_beads, num_seg_beads, num_segments, mass):
     # Computing bead masses
     bead_masses = np.zeros(num_beads+1)
@@ -77,22 +105,122 @@ def get_harmonic_density(pos, inv_temp, mass, omega):
     exp_constant = np.pi * normalization**2
     return normalization * np.exp(-exp_constant * pos**2 )
 
-@jit(nopython=True)
-def get_harmonic_potential(positions, mass, frequency, num_beads, left_wall, option):
+def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, omega, omegaP, beta, bead_masses, freqs):
+    accept = 0                            # To count # of acceptances
+    force_on_z = 0
+    # lastu_bead = np.zeros(0)
+    #============================================================================
+    # PIMC starts here!!!
+    counter = 1
+    while counter <= num_steps:
+        # Sampling intermediate beads
+        if j != 1:
+            for mc_count in range(capital_n):
+                if counter > num_steps:
+                    break
+                # Pick a random segment.
+                group_num = np.random.randint(capital_n)
+                # Save initial primitives
+                old_coords = np.zeros(pbeads+1)
+                for w in range(pbeads+1):
+                    old_coords[w] = primitives_r[w]
+                # Define potential from initial primitives
+                old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ints")
+                # Define proposal
+                primitives_r = set_proposal_2(primitives_r, j, capital_n, group_num*j, beta, bead_masses, freqs)
+                # Define potential from proposed primitives
+                proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ints")
+                # Acceptance criteria
+                Pacc = min(1,np.exp(-beta * (1/pbeads) * (proposed_potential - old_potential)) )
+                # Compare Pacc to u ~ U(0,1)
+                if np.random.uniform(0,1) > Pacc:
+                    for w in range(pbeads+1):
+                        primitives_r[w] = old_coords[w]
+                else:
+                    accept += 1
+                z_force_const = 0.34
+                force_on_z += z_force_const*((primitives_r[0] - primitives_r[pbeads]) - primitive_z)
+                # lastu_bead = np.append(lastu_bead, primitives_r[0] - primitives_r[pbeads])
+                counter += 1
+        # Sampling endpoint beads
+        for mc_count in range(capital_n-1):
+            if counter > num_steps:
+                break
+            # Pick a random endpoint bead.
+            group_num = np.random.randint(1,capital_n)
+            # Save initial primitives
+            old_coords = np.zeros(pbeads+1)
+            for w in range(pbeads+1):
+                old_coords[w] = primitives_r[w]
+            # Define potential from initial primitives
+            old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ends")
+            # Define proposal
+            primitives_r = set_proposal_3(primitives_r, j, capital_n, group_num*j, beta, bead_masses, freqs)
+            # Define potential from proposed primitives
+            proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ends")
+            # Acceptance criteria
+            Pacc = min(1,np.exp(-beta * (1/pbeads) * (proposed_potential - old_potential)) )
+            # Compare Pacc to u ~ U(0,1)
+            if np.random.uniform(0,1) > Pacc:
+                for w in range(pbeads+1):
+                    primitives_r[w] = old_coords[w]
+            else:
+                accept += 1
+            z_force_const = 0.34
+            force_on_z += z_force_const*((primitives_r[0] - primitives_r[pbeads]) - primitive_z)
+            # lastu_bead = np.append(lastu_bead, primitives_r[0] - primitives_r[pbeads])
+            counter += 1
+        # Sampling the whole chain
+        if counter > num_steps:
+            break
+        # Save initial primitives
+        old_coords = np.zeros(pbeads+1)
+        for w in range(pbeads+1):
+            old_coords[w] = primitives_r[w]
+        # Define potential from initial primitives
+        old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, pbeads+1, group_num*j, "chain")
+        # Define proposal
+        primitives_r = set_proposal_1(primitives_r, bead_masses, freqs, beta, pbeads+1, j, capital_n)
+        # Define potential from proposed primitives
+        proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, pbeads+1, group_num*j, "chain")
+        # Acceptance criteria
+        Pacc = min(1,np.exp(-beta * (1/pbeads) * (proposed_potential - old_potential)) )
+        # Compare Pacc to u ~ U(0,1)
+        if np.random.uniform(0,1) > Pacc:
+            for w in range(pbeads+1):
+                primitives_r[w] = old_coords[w]
+        else:
+            accept += 1
+        z_force_const = 0.34
+        force_on_z += z_force_const*((primitives_r[0] - primitives_r[pbeads]) - primitive_z)
+        # lastu_bead = np.append(lastu_bead, primitives_r[0] - primitives_r[pbeads])
+        counter += 1
+    print("what's acceptance ratio? ", accept)
+    return force_on_z/num_steps, primitives_r
+
+# @jit(nopython=True)
+def get_harmonic_potential(positions, z_pos, mass, frequency, num_beads, left_wall, option):
     pot = 0
+    # (kay constant below should be moved to outside block)
     # If sampling intermediate beads
     if option == "ints":
         for y in range(left_wall+1,left_wall + num_beads):
             pot += 0.5 * mass * (frequency**2) * positions[y]**2
+        kay = 0.34
+        pot += 0.5 * kay * ((positions[0] - positions[len(positions)-1]) - z_pos)**2
     # If sampling endpoint beads
     elif option == "ends":
         pot += 0.5 * mass * (frequency**2) * positions[left_wall]**2
+        kay = 0.34
+        pot += 0.5 * kay * ((positions[0] - positions[len(positions)-1]) - z_pos)**2
     # If sampling the whole chain
     elif option == "chain":
         pot += 0.25 * mass * (frequency**2) * positions[0]**2
         for y in range(1,num_beads-1):
             pot += 0.5 * mass * (frequency**2) * positions[y]**2
         pot += 0.25 * mass * (frequency**2) * positions[num_beads-1]**2
+        kay = 0.34
+        pot += 0.5 * kay * ((positions[0] - positions[num_beads-1]) - z_pos)**2
     return pot
 
 @jit(nopython=True)
@@ -100,7 +228,7 @@ def get_harmonic_potential(positions, mass, frequency, num_beads, left_wall, opt
 def set_proposal_1(coords, bead_masses, freqs, inv_temp, num_beads, num_seg_beads, num_segments):
     # Transform entire chain to staged coordinates
     staged = stage_coords(coords, num_beads-1, num_seg_beads, num_segments)
-    # Perturb the uncoupled mode variable  (PLAY AROUND WITH THIS STEP!!!!!!!!!!)
+    # Perturb the uncoupled mode variable
     staged[0] += np.random.uniform(-1,1)
     staged[num_beads-1] = np.random.normal(0, 1.0/np.sqrt( inv_temp * bead_masses[num_beads-1] * freqs[num_beads-1]**2) )
     # Transform back to primitive coordinates
