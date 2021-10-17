@@ -3,6 +3,33 @@ import numba
 from numba import jit
 
 @jit(nopython=True)
+def get_masses(num_beads, num_seg_beads, num_segments, mass):
+    # Computing bead masses
+    bead_masses = np.zeros(num_beads+1)
+    # Defining the mass for the first bead
+    bead_masses[0] = 0
+    # Defining masses for endpoint beads
+    for s in range(1,num_segments+1):
+        bead_masses[s*num_seg_beads] = (s+1) * mass / s
+    # Defining masses for intermediate beads
+        for k in range(1,num_seg_beads):
+            bead_masses[(s-1)*num_seg_beads + k] = (k+1) * mass / k
+    # Defining the mass for the last bead
+    bead_masses[num_beads] = mass/num_segments
+    return bead_masses
+
+@jit(nopython=True)
+def get_bead_frequencies(num_beads, num_seg_beads, num_segments, omegaP):
+    # Computing bead frequencies
+    bead_freqs = np.zeros(num_beads+1)
+    for s in range(num_segments):
+        bead_freqs[s*num_seg_beads] = omegaP / np.sqrt(num_seg_beads)
+        for k in range(1, num_seg_beads):
+            bead_freqs[s*num_seg_beads + k] = omegaP
+    bead_freqs[num_beads] = omegaP / np.sqrt(num_seg_beads)
+    return bead_freqs
+
+@jit(nopython=True)
 def stage_coords(xi, num_beads, num_seg_beads, num_segments):
     up_u = np.zeros(len(xi))
     for p in range(len(xi)):
@@ -55,13 +82,13 @@ def get_harmonic_potential(positions, mass, frequency, num_beads, left_wall, opt
     pot = 0
     # If sampling intermediate beads
     if option == "ints":
-        for y in range(left_wall+1,left_wall + num_beads):    
+        for y in range(left_wall+1,left_wall + num_beads):
             pot += 0.5 * mass * (frequency**2) * positions[y]**2
     # If sampling endpoint beads
     elif option == "ends":
         pot += 0.5 * mass * (frequency**2) * positions[left_wall]**2
     # If sampling the whole chain
-    elif option == "chain":  
+    elif option == "chain":
         pot += 0.25 * mass * (frequency**2) * positions[0]**2
         for y in range(1,num_beads-1):
             pot += 0.5 * mass * (frequency**2) * positions[y]**2
@@ -96,4 +123,3 @@ def set_proposal_3(coords, num_seg_beads, num_segments, left_wall, inv_temp, bea
     # Sample the guassian distribution.
     staged[left_wall] = np.random.normal(0, 1.0/np.sqrt( inv_temp * bead_masses[left_wall] * freqs[left_wall]**2) )
     return inverse_stage_coords(staged, len(coords)-1, num_seg_beads, num_segments)
-
