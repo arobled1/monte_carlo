@@ -105,7 +105,8 @@ def get_harmonic_density(pos, inv_temp, mass, omega):
     exp_constant = np.pi * normalization**2
     return normalization * np.exp(-exp_constant * pos**2 )
 
-def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, omega, omegaP, beta, bead_masses, freqs):
+@jit(nopython=True)
+def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, omega, omegaP, beta, bead_masses, freqs, z_force_const):
     accept = 0                            # To count # of acceptances
     force_on_z = 0
     # lastu_bead = np.zeros(0)
@@ -125,11 +126,11 @@ def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, o
                 for w in range(pbeads+1):
                     old_coords[w] = primitives_r[w]
                 # Define potential from initial primitives
-                old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ints")
+                old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ints", z_force_const)
                 # Define proposal
                 primitives_r = set_proposal_2(primitives_r, j, capital_n, group_num*j, beta, bead_masses, freqs)
                 # Define potential from proposed primitives
-                proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ints")
+                proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ints", z_force_const)
                 # Acceptance criteria
                 Pacc = min(1,np.exp(-beta * (1/pbeads) * (proposed_potential - old_potential)) )
                 # Compare Pacc to u ~ U(0,1)
@@ -138,9 +139,7 @@ def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, o
                         primitives_r[w] = old_coords[w]
                 else:
                     accept += 1
-                z_force_const = 0.34
-                force_on_z += z_force_const*((primitives_r[0] - primitives_r[pbeads]) - primitive_z)
-                # lastu_bead = np.append(lastu_bead, primitives_r[0] - primitives_r[pbeads])
+                # force_on_z += z_force_const*((primitives_r[0] - primitives_r[pbeads]) - primitive_z)
                 counter += 1
         # Sampling endpoint beads
         for mc_count in range(capital_n-1):
@@ -153,11 +152,11 @@ def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, o
             for w in range(pbeads+1):
                 old_coords[w] = primitives_r[w]
             # Define potential from initial primitives
-            old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ends")
+            old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ends", z_force_const)
             # Define proposal
             primitives_r = set_proposal_3(primitives_r, j, capital_n, group_num*j, beta, bead_masses, freqs)
             # Define potential from proposed primitives
-            proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ends")
+            proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, j, group_num*j, "ends", z_force_const)
             # Acceptance criteria
             Pacc = min(1,np.exp(-beta * (1/pbeads) * (proposed_potential - old_potential)) )
             # Compare Pacc to u ~ U(0,1)
@@ -166,9 +165,7 @@ def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, o
                     primitives_r[w] = old_coords[w]
             else:
                 accept += 1
-            z_force_const = 0.34
-            force_on_z += z_force_const*((primitives_r[0] - primitives_r[pbeads]) - primitive_z)
-            # lastu_bead = np.append(lastu_bead, primitives_r[0] - primitives_r[pbeads])
+            # force_on_z += z_force_const*((primitives_r[0] - primitives_r[pbeads]) - primitive_z)
             counter += 1
         # Sampling the whole chain
         if counter > num_steps:
@@ -178,11 +175,11 @@ def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, o
         for w in range(pbeads+1):
             old_coords[w] = primitives_r[w]
         # Define potential from initial primitives
-        old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, pbeads+1, group_num*j, "chain")
+        old_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, pbeads+1, group_num*j, "chain", z_force_const)
         # Define proposal
         primitives_r = set_proposal_1(primitives_r, bead_masses, freqs, beta, pbeads+1, j, capital_n)
         # Define potential from proposed primitives
-        proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, pbeads+1, group_num*j, "chain")
+        proposed_potential = get_harmonic_potential(primitives_r, primitive_z, mass, omega, pbeads+1, group_num*j, "chain", z_force_const)
         # Acceptance criteria
         Pacc = min(1,np.exp(-beta * (1/pbeads) * (proposed_potential - old_potential)) )
         # Compare Pacc to u ~ U(0,1)
@@ -191,27 +188,22 @@ def run_pimc(primitives_r, primitive_z, num_steps, pbeads, j, capital_n, mass, o
                 primitives_r[w] = old_coords[w]
         else:
             accept += 1
-        z_force_const = 0.34
         force_on_z += z_force_const*((primitives_r[0] - primitives_r[pbeads]) - primitive_z)
-        # lastu_bead = np.append(lastu_bead, primitives_r[0] - primitives_r[pbeads])
         counter += 1
-    print("what's acceptance ratio? ", accept)
+    # print("what's acceptance ratio? ", accept)
     return force_on_z/num_steps, primitives_r
 
-# @jit(nopython=True)
-def get_harmonic_potential(positions, z_pos, mass, frequency, num_beads, left_wall, option):
+@jit(nopython=True)
+def get_harmonic_potential(positions, z_pos, mass, frequency, num_beads, left_wall, option, kay):
     pot = 0
-    # (kay constant below should be moved to outside block)
     # If sampling intermediate beads
     if option == "ints":
         for y in range(left_wall+1,left_wall + num_beads):
             pot += 0.5 * mass * (frequency**2) * positions[y]**2
-        kay = 0.34
         pot += 0.5 * kay * ((positions[0] - positions[len(positions)-1]) - z_pos)**2
     # If sampling endpoint beads
     elif option == "ends":
         pot += 0.5 * mass * (frequency**2) * positions[left_wall]**2
-        kay = 0.34
         pot += 0.5 * kay * ((positions[0] - positions[len(positions)-1]) - z_pos)**2
     # If sampling the whole chain
     elif option == "chain":
@@ -219,7 +211,6 @@ def get_harmonic_potential(positions, z_pos, mass, frequency, num_beads, left_wa
         for y in range(1,num_beads-1):
             pot += 0.5 * mass * (frequency**2) * positions[y]**2
         pot += 0.25 * mass * (frequency**2) * positions[num_beads-1]**2
-        kay = 0.34
         pot += 0.5 * kay * ((positions[0] - positions[num_beads-1]) - z_pos)**2
     return pot
 
