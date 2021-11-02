@@ -36,7 +36,7 @@ def tamc_run(prim_z, vel_z, prims_r, num_md_steps, num_mc_steps, num_pi_beads, n
 
 #=====================================================================
 # Block is for parameters
-md_steps = 100                             # Number of MD steps for z
+md_steps = 100000                             # Number of MD steps for z
 inv_temp = 15.8/3.0                          # kT
 w = 3.0                                      # Set Frequency
 m = 0.01                                     # Set Mass
@@ -46,15 +46,26 @@ big_n = 4                                    # Number of endpoint beads
 freq_P = np.sqrt(num_beads) / inv_temp       # Set w_P
 # z parameters below
 inv_temp_bar = 0.001*inv_temp
-mu = 0.42
-mc_steps = 5
+mu = 1.0
+mc_steps = 10000
 deltat = 0.0001
 friction = freq_P
-k_constant = 0.3
+k_constant = 0.005
 #======================================================================
 
 initial_xpos = np.asarray([float(x.split()[0]) for x in open('x_pos.txt').readlines()])
-initial_zpos = np.asarray([float(x.split()[0]) for x in open('z_pos.txt').readlines()])
-initial_zvel = np.asarray([float(x.split()[0]) for x in open('z_vel.txt').readlines()])
+# Sample z velocity and position from gaussian distributions
+initial_zpos = np.random.normal(0, np.sqrt(1.0/ (k_constant * inv_temp_bar)))
+initial_zvel = np.random.normal(0, np.sqrt(1.0/ (mu * inv_temp_bar)))
+# initial_zpos = np.asarray([float(x.split()[0]) for x in open('z_pos.txt').readlines()])
+# initial_zvel = np.asarray([float(x.split()[0]) for x in open('z_vel.txt').readlines()])
 
-last_bead = tamc_run(initial_zpos[0], initial_zvel[0], initial_xpos, md_steps, mc_steps, num_beads, jay, big_n, m, w, freq_P, inv_temp, mu, deltat, friction, k_constant, inv_temp_bar)
+last_bead = tamc_run(initial_zpos, initial_zvel, initial_xpos, md_steps, mc_steps, num_beads, jay, big_n, m, w, freq_P, inv_temp, mu, deltat, friction, k_constant, inv_temp_bar)
+
+# Writing values to file
+filename = open("samples.txt", "a+")
+for l in range(len(last_bead)):
+    filename.write(str(last_bead[l]))
+    filename.write('              ')
+    filename.write(str(l + 1) + "\n")
+filename.close()
